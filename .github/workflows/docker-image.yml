@@ -22,3 +22,5 @@ jobs:
         password: ${{ secrets.REGISTRY_PASSWORD }}
     - name: Build the Docker image
       run: docker build . --file Dockerfile --tag ${{ secrets.REGISTRY_URL }}/pytorres:${GITHUB_SHA::7}
+    - name: Push to repository
+      run: docker push ${{ secrets.REGISTRY_URL }}/pytorres:${GITHUB_SHA::7}
