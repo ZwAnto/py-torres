@@ -98,7 +98,7 @@ async def movie_tmdb(imdbId: str):
     else:
         tmdbId = res['movie_results'][0]['id']
         res = requests.get(f'https://api.themoviedb.org/3/movie/{tmdbId}?api_key={ config.get("TMDB_API_KEY") }&language=fr').json()
-        return {"success": True, "message": res}
+        return res
 
 
 @app.get("/movie/lookup", dependencies=[Depends(check_es(es))])
