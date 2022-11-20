@@ -24,6 +24,20 @@ parsers = {i.name: i for i in Parser.__subclasses__()}
 es = Elasticsearch(hosts=config['ES_HOST'])
 app = FastAPI()
 
+def es_get_detail(imdbId, index="imdb-movie*"):
+    return es.search(
+        index=index, 
+        query={ "bool": {
+            "filter": [
+                {"bool": {
+                    "should": [
+                        {"match": {"imdbId": imdbId}}
+                    ]
+                }},
+            {"match": {"source":"primary"}}
+        ]}
+    })
+
 
 #     ██████╗ █████╗  ██████╗██╗  ██╗███████╗
 #    ██╔════╝██╔══██╗██╔════╝██║  ██║██╔════╝
@@ -67,20 +81,8 @@ def es_info():
 
 @app.get("/movie/detail/{imdbId}", dependencies=[Depends(check_es(es))])
 def movie(imdbId):
+    es_matches_primary = es_get_detail(imdbId,"imdb-movie*")
 
-    es_matches_primary = es.search(
-        index="imdb-movie*", 
-        query={"bool": {
-            "filter": [
-                {"bool": {
-                    "should": [
-                        #{"match": {"imdbId": i}} for i in self.es_scores.keys()
-                        {"match": {"imdbId": imdbId}}
-                    ]
-                }},
-                {"match": {"source":"primary"}}
-        ]}})
-    
     if es_matches_primary['hits']['total']['value'] == 0:
         raise HTTPException(status_code=500, detail=f"No match found using imdbId {imdbId}.")
     else:
@@ -125,3 +127,61 @@ def movie_lookup(q: str, index: str, year: Union[None, str]=None, parser: Union[
         ]
 
     return aggregate_es_scores(es.search(index="imdb-movie*", query=query))
+
+
+#       ██╗████████╗██╗   ██╗
+#      ██╔╝╚══██╔══╝██║   ██║
+#     ██╔╝    ██║   ██║   ██║
+#    ██╔╝     ██║   ╚██╗ ██╔╝
+#   ██╔╝      ██║    ╚████╔╝ 
+#   ╚═╝       ╚═╝     ╚═══╝  
+                       
+@app.get("/tv/detail/{imdbId}", dependencies=[Depends(check_es(es))])
+def tv(imdbId):
+
+    es_matches_primary = es_get_detail(imdbId,"imdb-serie*")    
+
+    if es_matches_primary['hits']['total']['value'] == 0:
+        raise HTTPException(status_code=500, detail=f"No match found using imdbId {imdbId}.")
+    else:
+        return es_matches_primary['hits']['hits'][0]['_source']
+
+
+@app.get("/tv/detail/{imdbId}/tmdb")
+@cache(expire=60*60*24)
+async def tv_tmdb(imdbId: str):
+
+    res = requests.get(f'https://api.themoviedb.org/3/find/{imdbId}?api_key={ config.get("TMDB_API_KEY") }&external_source=imdb_id').json()
+    
+    if len(res['tv_results']) == 0:
+        raise HTTPException(status_code=500, detail=f"No match found with imdbId {imdbId}.")
+    else:
+        tmdbId = res['tv_results'][0]['id']
+        res = requests.get(f'https://api.themoviedb.org/3/tv/{tmdbId}?api_key={ config.get("TMDB_API_KEY") }&language=fr').json()
+        return res
+
+
+@app.get("/tv/lookup", dependencies=[Depends(check_es(es))])
+def movie_lookup(q: str, index: str, year: Union[None, str]=None, parser: Union[None, str]=None):
+
+    if parser is not None:
+        q_parsed = parsers[parser](q)
+        q = q_parsed.query_string
+
+        if year is None:
+            year = q_parsed.PTN.get('year')
+
+    query = {    
+        "bool": {
+            "must": [
+                {"query_string": { "query": q }}
+            ]
+        }
+    }
+
+    if year is not None:
+        query['bool']['should'] = [
+            {"match": { "year": year }}
+        ]
+
+    return aggregate_es_scores(es.search(index="imdb-serie*", query=query))
