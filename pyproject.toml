@@ -12,7 +12,8 @@ elasticsearch = "^8.5.0"
 python-dotenv = "^0.21.0"
 parse-torrent-title = "^2.4"
 requests = "^2.28.1"
-fastapi-cache2 = {extras = ["redis"], version = "^0.1.9"}
+requests-cache = "^0.9.7"
+redis = "^4.3.4"
 
 [tool.poetry.dev-dependencies]
 
